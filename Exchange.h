@@ -7,7 +7,7 @@
 #include <deque>
 
 struct AccountState {
-    double cash   = 1'000'000.0;
+    double cash   = 0.0;
     int    shares = 0;
 };
 

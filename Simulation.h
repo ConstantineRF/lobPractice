@@ -42,17 +42,21 @@ private:
                         InboundComparator> inbound_to_exchange_;
 
     // ── Outbound to traders (exchange → trader) min-heap ──────────────────────
+    // seq preserves generation order for messages with identical delivery times
     struct TimedTraderMsg {
-        SimTime       delivery_time;
-        TraderID      trader_id;
+        SimTime         delivery_time;
+        uint64_t        seq;
+        TraderID        trader_id;
         ExchToTraderMsg msg;
         bool operator>(const TimedTraderMsg& o) const {
-            return delivery_time > o.delivery_time;
+            if (delivery_time != o.delivery_time) return delivery_time > o.delivery_time;
+            return seq > o.seq;
         }
     };
     std::priority_queue<TimedTraderMsg,
                         std::vector<TimedTraderMsg>,
                         std::greater<TimedTraderMsg>> outbound_to_traders_;
+    uint64_t outbound_seq_ = 0;
 
     std::deque<LogEntry> global_log_;       // last 20 non-LOB messages (for UI)
     std::vector<LobUpdateMsg> latest_lob_updates_;

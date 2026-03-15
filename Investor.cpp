@@ -47,7 +47,8 @@ void Investor::handleFill(const FillMsg& msg, SimTime now) {
         }
     }
     addLog(now, "FILL " + filledStr(msg.side) + " qty=" + std::to_string(msg.qty) +
-        " @$" + std::to_string(centsToDouble(msg.price)).substr(0,6));
+        " @$" + std::to_string(centsToDouble(msg.price)).substr(0,6) +
+        " id=" + std::to_string(msg.order_id));
 }
 
 void Investor::handleCancelled(const CancelledMsg& msg, SimTime now) {
@@ -61,16 +62,22 @@ void Investor::handleCancelled(const CancelledMsg& msg, SimTime now) {
 void Investor::onMessage(const ExchToTraderMsg& msg, SimTime now) {
     std::visit([&](const auto& m) {
         using T = std::decay_t<decltype(m)>;
-        if constexpr (std::is_same_v<T, NewAckMsg>)         handleAck(m, now);
-        else if constexpr (std::is_same_v<T, FillMsg>)      handleFill(m, now);
-        else if constexpr (std::is_same_v<T, CancelledMsg>) handleCancelled(m, now);
-        else {
-            // CANCELREJECT: order already gone, clear our state
+        if constexpr (std::is_same_v<T, NewAckMsg>)           handleAck(m, now);
+        else if constexpr (std::is_same_v<T, FillMsg>)        handleFill(m, now);
+        else if constexpr (std::is_same_v<T, CancelledMsg>)   handleCancelled(m, now);
+        else if constexpr (std::is_same_v<T, CancelRejectMsg>) {
             if (active_order_id_.has_value() && active_order_id_.value() == m.order_id) {
                 active_order_id_.reset();
                 waiting_for_ack_ = false;
             }
             addLog(now, "CANCELREJECT id=" + std::to_string(m.order_id));
+        }
+        else if constexpr (std::is_same_v<T, ModifyRejectMsg>) {
+            if (active_order_id_.has_value() && active_order_id_.value() == m.order_id) {
+                active_order_id_.reset();
+                waiting_for_ack_ = false;
+            }
+            addLog(now, "MODIFYREJECT id=" + std::to_string(m.order_id));
         }
     }, msg);
 }
@@ -112,8 +119,7 @@ std::vector<TraderToExchMsg> Investor::onTick(SimTime now, const ExchangeView& v
                 active_price_    = new_price;
                 order_sent_time_ = now;
                 waiting_for_ack_ = true;
-                addLog(now, "MODIFY " + sideStr(active_side_) + " @$" +
-                    std::to_string(centsToDouble(new_price)).substr(0,6));
+
             } else {
                 order_sent_time_ = now;  // reset timer — price hasn't changed
             }

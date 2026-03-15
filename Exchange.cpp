@@ -91,10 +91,10 @@ void Exchange::processCancel(const CancelMsg& msg, SimTime now) {
 void Exchange::processModify(const ModifyMsg& msg, SimTime now) {
     auto it = order_owners_.find(msg.order_id);
     if (it == order_owners_.end() || it->second != msg.trader_id) {
-        // Order gone — send cancel reject (spec: CANCELREJECT for missing order)
-        CancelRejectMsg rej{msg.trader_id, msg.order_id, now};
+        // Order gone — send modify reject
+        ModifyRejectMsg rej{msg.trader_id, msg.order_id, now};
         outbound_trader_.push_back({msg.trader_id, rej});
-        addGlobalLog(now, msg.trader_id, "CANCELREJECT(MOD) " +
+        addGlobalLog(now, msg.trader_id, "MODIFYREJECT " +
             std::to_string(msg.trader_id) + " " + std::to_string(msg.order_id) +
             " " + formatTime(now));
         return;

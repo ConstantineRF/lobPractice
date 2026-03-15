@@ -52,9 +52,7 @@ Simulation::Simulation() : rng_(std::random_device{}()) {
 
 SimTime Simulation::sampleLatency(TraderID tid, SimTime now) const {
     double avg_ms = trader_avg_latency_[tid - 1];
-    std::uniform_real_distribution<double> dist(0.8, 1.2);
-    double latency_s = avg_ms * dist(rng_) / 1000.0;
-    return now + latency_s;
+    return now + avg_ms / 1000.0;
 }
 
 ExchangeView Simulation::buildView() const {
@@ -95,7 +93,7 @@ void Simulation::tick() {
         auto msgs = exchange_.drainTraderMessages();
         for (auto& [tid, msg] : msgs) {
             SimTime delivery = sampleLatency(tid, now);
-            outbound_to_traders_.push({delivery, tid, msg});
+            outbound_to_traders_.push({delivery, outbound_seq_++, tid, msg});
         }
     }
 
@@ -109,7 +107,7 @@ void Simulation::tick() {
     // ── 4. Deliver outbound messages to traders ───────────────────────────────
     while (!outbound_to_traders_.empty() &&
            outbound_to_traders_.top().delivery_time <= now) {
-        auto [dt, tid, msg] = outbound_to_traders_.top();
+        auto [dt, seq, tid, msg] = outbound_to_traders_.top();
         outbound_to_traders_.pop();
         traders_[tid - 1]->onMessage(msg, now);
     }
@@ -123,7 +121,13 @@ void Simulation::tick() {
     }
 
     // ── 6. Update analysts ────────────────────────────────────────────────────
-    analysts_.update(now);
+    {
+        bool has_mid = view.has_bid && view.has_ask;
+        double midquote = has_mid
+            ? (centsToDouble(view.best_bid) + centsToDouble(view.best_ask)) / 2.0
+            : 0.0;
+        analysts_.update(now, midquote, has_mid);
+    }
 
     // ── 7. Drain exchange global log → our rolling log (cap 20) ──────────────
     auto new_logs = exchange_.drainGlobalLog();

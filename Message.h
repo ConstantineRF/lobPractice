@@ -77,7 +77,13 @@ struct CancelRejectMsg {
     SimTime  timestamp;
 };
 
-using ExchToTraderMsg = std::variant<NewAckMsg, FillMsg, CancelledMsg, CancelRejectMsg>;
+struct ModifyRejectMsg {
+    TraderID trader_id;
+    OrderID  order_id;
+    SimTime  timestamp;
+};
+
+using ExchToTraderMsg = std::variant<NewAckMsg, FillMsg, CancelledMsg, CancelRejectMsg, ModifyRejectMsg>;
 
 // ─── Exchange → All (LOB updates) ────────────────────────────────────────────
 

@@ -31,14 +31,14 @@ private:
     // ── Colors ────────────────────────────────────────────────────────────────
     static sf::Color COL_BG()       { return {15,  15,  20}; }
     static sf::Color COL_PANEL()    { return {25,  25,  35}; }
-    static sf::Color COL_BORDER()   { return {60,  60,  80}; }
-    static sf::Color COL_TEXT()     { return {220, 220, 230}; }
-    static sf::Color COL_DIM()      { return {120, 120, 140}; }
-    static sf::Color COL_BUY()      { return {0,   120, 255}; }
-    static sf::Color COL_SELL()     { return {255, 140,   0}; }
-    static sf::Color COL_GREEN()    { return {100, 220, 100}; }
-    static sf::Color COL_YELLOW()   { return {220, 200, 100}; }
-    static sf::Color COL_HEADER()   { return {180, 180, 220}; }
+    static sf::Color COL_BORDER()   { return {80,  80, 110}; }
+    static sf::Color COL_TEXT()     { return {255, 255, 255}; }
+    static sf::Color COL_DIM()      { return {180, 180, 200}; }
+    static sf::Color COL_BUY()      { return {80,  180, 255}; }
+    static sf::Color COL_SELL()     { return {255, 180,  60}; }
+    static sf::Color COL_GREEN()    { return {120, 255, 120}; }
+    static sf::Color COL_YELLOW()   { return {255, 240, 100}; }
+    static sf::Color COL_HEADER()   { return {220, 220, 255}; }
 
     // ── Price chart state ─────────────────────────────────────────────────────
     struct PricePoint { SimTime time; Price bid; Price ask; };

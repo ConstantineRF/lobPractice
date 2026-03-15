@@ -42,7 +42,7 @@ protected:
     TraderID id_;
     double   avg_latency_ms_;
 
-    double cash_   = 1'000'000.0;
+    double cash_   = 0.0;
     int    shares_ = 0;
 
     struct LiveOrder {
@@ -62,7 +62,7 @@ protected:
 
     NewOrderMsg makeNewOrder(Side side, Qty qty, Price price, SimTime now) const;
     CancelMsg   makeCancel  (OrderID order_id, SimTime now) const;
-    ModifyMsg   makeModify  (OrderID order_id, Side side, Qty qty, Price price, SimTime now) const;
+    ModifyMsg   makeModify  (OrderID order_id, Side side, Qty qty, Price price, SimTime now);
 
     // RNG (shared per-trader instance)
     mutable std::mt19937 rng_;

@@ -37,7 +37,7 @@ CancelMsg Trader::makeCancel(OrderID order_id, SimTime now) const {
     return msg;
 }
 
-ModifyMsg Trader::makeModify(OrderID order_id, Side side, Qty qty, Price price, SimTime now) const {
+ModifyMsg Trader::makeModify(OrderID order_id, Side side, Qty qty, Price price, SimTime now) {
     ModifyMsg msg;
     msg.trader_id    = id_;
     msg.order_id     = order_id;
@@ -46,5 +46,8 @@ ModifyMsg Trader::makeModify(OrderID order_id, Side side, Qty qty, Price price, 
     msg.new_price    = price;
     msg.sent_time    = now;
     msg.delivery_time = sampleDelivery(now);
+    addLog(now, "MODIFY " + sideStr(side) + " @$" +
+        std::to_string(centsToDouble(price)).substr(0, 6) +
+        " id=" + std::to_string(order_id));
     return msg;
 }

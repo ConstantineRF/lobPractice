@@ -74,7 +74,8 @@ void MarketMaker::handleFill(const FillMsg& msg, SimTime now) {
 
     std::string s = "FILL " + filledStr(msg.side) + " qty=" +
         std::to_string(msg.qty) + " @$" +
-        std::to_string(centsToDouble(msg.price)).substr(0,6);
+        std::to_string(centsToDouble(msg.price)).substr(0,6) +
+        " id=" + std::to_string(msg.order_id);
     addLog(now, s);
 }
 
@@ -89,10 +90,11 @@ void MarketMaker::handleCancelled(const CancelledMsg& msg, SimTime now) {
 void MarketMaker::onMessage(const ExchToTraderMsg& msg, SimTime now) {
     std::visit([&](const auto& m) {
         using T = std::decay_t<decltype(m)>;
-        if constexpr (std::is_same_v<T, NewAckMsg>)       handleAck(m, now);
-        else if constexpr (std::is_same_v<T, FillMsg>)    handleFill(m, now);
-        else if constexpr (std::is_same_v<T, CancelledMsg>) handleCancelled(m, now);
-        else addLog(now, "CANCELREJECT id=" + std::to_string(m.order_id));
+        if constexpr (std::is_same_v<T, NewAckMsg>)            handleAck(m, now);
+        else if constexpr (std::is_same_v<T, FillMsg>)         handleFill(m, now);
+        else if constexpr (std::is_same_v<T, CancelledMsg>)    handleCancelled(m, now);
+        else if constexpr (std::is_same_v<T, CancelRejectMsg>) addLog(now, "CANCELREJECT id=" + std::to_string(m.order_id));
+        else if constexpr (std::is_same_v<T, ModifyRejectMsg>) addLog(now, "MODIFYREJECT id=" + std::to_string(m.order_id));
     }, msg);
 }
 
