@@ -9,7 +9,7 @@ int main()
     std::cout << "DEV Version 20260314 by Konstantin Kalinchenko" << std::endl;
     std::cout << "KostyaEx LOB Simulator — XYZ Stock" << std::endl;
 
-    sf::RenderWindow window(sf::VideoMode({1600, 900}), "KostyaEx — LOB Simulator");
+    sf::RenderWindow window(sf::VideoMode({1920, 1200}), "KostyaEx — LOB Simulator");
     window.setFramerateLimit(60);
 
     Simulation sim;

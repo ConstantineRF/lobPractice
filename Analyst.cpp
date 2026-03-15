@@ -35,8 +35,8 @@ void AnalystSystem::applyRandomUpdate(double midquote, bool has_midquote) {
     std::iota(indices.begin(), indices.end(), 0);
     std::shuffle(indices.begin(), indices.end(), rng());
 
-    // Possible magnitudes
-    static const int magnitudes[] = {1, 2, 3};
+    // Possible magnitudes (in dollars)
+    static const double magnitudes[] = {0.10, 0.15, 0.20};
     std::uniform_int_distribution<int> mag_dist(0, 2);
 
     for (int i = 0; i < count; ++i) {
@@ -65,7 +65,7 @@ void AnalystSystem::applyRandomUpdate(double midquote, bool has_midquote) {
             sign = dir_dist(rng()) ? +1 : -1;
         }
 
-        int delta = sign * magnitudes[mag_dist(rng())];
+        double delta = sign * magnitudes[mag_dist(rng())];
         double proposed = opinion + delta;
 
         // Constraint 1: min opinion >= 1.0
@@ -83,12 +83,27 @@ void AnalystSystem::applyRandomUpdate(double midquote, bool has_midquote) {
 }
 
 void AnalystSystem::applyNewsEvent() {
-    // Randomly bullish or bearish news
-    std::uniform_int_distribution<int> coin(0, 1);
-    int direction = coin(rng()) ? +1 : -1;
+    // Determine direction with mean-reverting probability:
+    // P(same as last) = 0.5 / (1 + consecutive_news_count_)
+    // First event is 50/50.
+    int direction;
+    std::uniform_real_distribution<double> coin(0.0, 1.0);
+    if (last_news_direction_ == 0) {
+        direction = coin(rng()) < 0.5 ? +1 : -1;
+    } else {
+        double p_same = 0.5 / (1.0 + consecutive_news_count_);
+        direction = (coin(rng()) < p_same) ? last_news_direction_ : -last_news_direction_;
+    }
 
-    // Each analyst moves 10-20 dollars in the same direction
-    std::uniform_int_distribution<int> mag_dist(10, 20);
+    // Update streak tracking
+    if (direction == last_news_direction_)
+        ++consecutive_news_count_;
+    else
+        consecutive_news_count_ = 1;
+    last_news_direction_ = direction;
+
+    // Each analyst moves $1-$2 in the same direction
+    std::uniform_real_distribution<double> mag_dist(1.0, 2.0);
 
     for (int i = 0; i < NUM_ANALYSTS; ++i) {
         double prev = opinions_[i];

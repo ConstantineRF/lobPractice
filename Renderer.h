@@ -16,17 +16,19 @@ private:
     sf::Font          font_;
 
     // ── Window / panel dimensions ─────────────────────────────────────────────
-    static constexpr float WIN_W = 1600.f;
-    static constexpr float WIN_H = 900.f;
+    static constexpr float WIN_W = 1920.f;
+    static constexpr float WIN_H = 1200.f;
 
-    // Top 4 panels: each 400 × 450
-    static constexpr float TOP_H    = 450.f;
-    static constexpr float TOP_W    = 400.f;
+    // Top 4 panels: height 600, widths vary
+    static constexpr float TOP_H    = 600.f;
+    static constexpr float TOP_W    = 480.f;  // Price chart & Holdings
+    static constexpr float OB_W     = 552.f;  // Order book (wider)
+    static constexpr float LOG_W    = 408.f;  // Exchange log (narrower)
 
-    // Bottom 10 trader panels: 5 columns × 2 rows, each 320 × 225
-    static constexpr float BOT_H    = 225.f;
-    static constexpr float BOT_W    = 320.f;
-    static constexpr float BOT_Y    = 450.f;
+    // Bottom 10 trader panels: 5 columns × 2 rows, each 384 × 300
+    static constexpr float BOT_H    = 300.f;
+    static constexpr float BOT_W    = 384.f;
+    static constexpr float BOT_Y    = 600.f;
 
     // ── Colors ────────────────────────────────────────────────────────────────
     static sf::Color COL_BG()       { return {15,  15,  20}; }

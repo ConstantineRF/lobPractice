@@ -76,19 +76,21 @@ void Investor::onMessage(const ExchToTraderMsg& msg, SimTime now) {
         else if constexpr (std::is_same_v<T, FillMsg>)        handleFill(m, now);
         else if constexpr (std::is_same_v<T, CancelledMsg>)   handleCancelled(m, now);
         else if constexpr (std::is_same_v<T, CancelRejectMsg>) {
-            if (active_order_id_.has_value() && active_order_id_.value() == m.order_id) {
+            // Always clear flags — active_order_id_ may already be nullopt if a full fill
+            // arrived before this reject, so don't gate the cleanup on the id check.
+            waiting_for_ack_ = false;
+            cancelling_ = false;
+            if (active_order_id_.has_value() && active_order_id_.value() == m.order_id)
                 active_order_id_.reset();
-                waiting_for_ack_ = false;
-                cancelling_ = false;
-            }
             addLog(now, "CANCELREJECT id=" + std::to_string(m.order_id));
         }
         else if constexpr (std::is_same_v<T, ModifyRejectMsg>) {
-            if (active_order_id_.has_value() && active_order_id_.value() == m.order_id) {
+            // Same: full fill may have already cleared active_order_id_ while the modify
+            // was in flight, leaving waiting_for_ack_ stuck true if we guard on the id.
+            waiting_for_ack_ = false;
+            cancelling_ = false;
+            if (active_order_id_.has_value() && active_order_id_.value() == m.order_id)
                 active_order_id_.reset();
-                waiting_for_ack_ = false;
-                cancelling_ = false;
-            }
             addLog(now, "MODIFYREJECT id=" + std::to_string(m.order_id));
         }
     }, msg);
@@ -132,8 +134,9 @@ std::vector<TraderToExchMsg> Investor::onTick(SimTime now, const ExchangeView& v
                                          active_qty_, new_price, now));
                 active_price_    = new_price;
                 order_sent_time_ = now;
-                waiting_for_ack_ = true;
-
+                // Do NOT set waiting_for_ack_ here — there is no ModifyAckMsg.
+                // active_order_id_ already tracks the order; order_sent_time_ prevents
+                // re-modify spam. Leaving waiting_for_ack_ false keeps the cancel path live.
             } else {
                 order_sent_time_ = now;  // reset timer — price hasn't changed
             }

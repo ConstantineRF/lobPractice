@@ -37,7 +37,7 @@ void Renderer::drawText(const std::string& str, sf::Vector2f pos,
 
 void Renderer::drawPanel(sf::Vector2f origin, sf::Vector2f size, const std::string& title) {
     drawRect(origin, size, COL_PANEL(), COL_BORDER(), 1.f);
-    drawText(title, {origin.x + 4.f, origin.y + 2.f}, 11, COL_HEADER());
+    drawText(title, {origin.x + 5.f, origin.y + 2.f}, 13, COL_HEADER());
 }
 
 void Renderer::drawLine(sf::Vector2f a, sf::Vector2f b, sf::Color color) {
@@ -55,10 +55,10 @@ void Renderer::render(const Simulation& sim) {
     window_.clear(COL_BG());
 
     // ── Top 4 panels ─────────────────────────────────────────────────────────
-    drawPriceChart   ({0.f,     0.f}, sim);
-    drawOrderBook    ({400.f,   0.f}, sim);
-    drawMessageLog   ({800.f,   0.f}, sim);
-    drawHoldingsTable({1200.f,  0.f}, sim);
+    drawPriceChart   ({0.f,    0.f}, sim);
+    drawOrderBook    ({480.f,  0.f}, sim);
+    drawMessageLog   ({1032.f, 0.f}, sim);
+    drawHoldingsTable({1440.f, 0.f}, sim);
 
     // ── Bottom trader panels (5 MM + 5 Investors, 2 rows × 5 cols) ───────────
     for (int i = 0; i < NUM_TRADERS; ++i) {
@@ -90,7 +90,7 @@ void Renderer::drawPriceChart(sf::Vector2f origin, const Simulation& sim) {
     }
 
     if (price_history_.size() < 2) {
-        drawText("Waiting for data...", {origin.x + 10.f, origin.y + H / 2.f}, 12, COL_DIM());
+        drawText("Waiting for data...", {origin.x + 10.f, origin.y + H / 2.f}, 15, COL_DIM());
         return;
     }
 
@@ -105,7 +105,7 @@ void Renderer::drawPriceChart(sf::Vector2f origin, const Simulation& sim) {
     float price_range = (float)(max_p - min_p);
 
     // Chart area inside panel
-    const float PAD_L = 50.f, PAD_R = 10.f, PAD_T = 20.f, PAD_B = 28.f;
+    const float PAD_L = 60.f, PAD_R = 12.f, PAD_T = 26.f, PAD_B = 36.f;
     float cx = origin.x + PAD_L;
     float cy = origin.y + PAD_T;
     float cw = W - PAD_L - PAD_R;
@@ -115,7 +115,7 @@ void Renderer::drawPriceChart(sf::Vector2f origin, const Simulation& sim) {
     auto priceLabel = [&](Price p, float y) {
         char buf[16];
         std::snprintf(buf, sizeof(buf), "%.2f", centsToDouble(p));
-        drawText(buf, {origin.x + 2.f, y - 6.f}, 10, COL_DIM());
+        drawText(buf, {origin.x + 2.f, y - 7.f}, 12, COL_DIM());
     };
     priceLabel(max_p, cy);
     priceLabel(min_p, cy + ch);
@@ -146,7 +146,7 @@ void Renderer::drawPriceChart(sf::Vector2f origin, const Simulation& sim) {
             if (ti % 60 == 0) {
                 char tbuf[10];
                 std::snprintf(tbuf, sizeof(tbuf), "%d:%02d", ti / 60, ti % 60);
-                drawText(tbuf, {gx - 12.f, cy + ch + 5.f}, 9, COL_DIM());
+                drawText(tbuf, {gx - 16.f, cy + ch + 7.f}, 11, COL_DIM());
             }
         }
     }
@@ -167,16 +167,16 @@ void Renderer::drawPriceChart(sf::Vector2f origin, const Simulation& sim) {
     // Current bid/ask labels
     if (book.hasBid())
         drawText("Bid " + [&]{ char b[12]; std::snprintf(b, 12, "%.2f", centsToDouble(book.bestBid())); return std::string(b); }(),
-                 {cx + cw - 70.f, toScreenY(book.bestBid()) - 14.f}, 10, COL_BUY());
+                 {cx + cw - 84.f, toScreenY(book.bestBid()) - 17.f}, 12, COL_BUY());
     if (book.hasAsk())
         drawText("Ask " + [&]{ char b[12]; std::snprintf(b, 12, "%.2f", centsToDouble(book.bestAsk())); return std::string(b); }(),
-                 {cx + cw - 70.f, toScreenY(book.bestAsk()) + 2.f}, 10, COL_SELL());
+                 {cx + cw - 84.f, toScreenY(book.bestAsk()) + 2.f}, 12, COL_SELL());
 }
 
 // ── Panel 2: Order Book Visualization ─────────────────────────────────────────
 
 void Renderer::drawOrderBook(sf::Vector2f origin, const Simulation& sim) {
-    const float W = TOP_W, H = TOP_H;
+    const float W = OB_W, H = TOP_H;
     drawPanel(origin, {W, H}, "ORDER BOOK — KostyaEx: XYZ");
 
     const auto& book = sim.getExchange().getBook();
@@ -185,11 +185,11 @@ void Renderer::drawOrderBook(sf::Vector2f origin, const Simulation& sim) {
 
     // Reverse ask levels so best ask is at center, others go upward
     // Layout: asks above center line, bids below
-    const float PAD   = 18.f;   // top offset for title
-    const float ROW_H = 17.f;
+    const float PAD   = 22.f;   // top offset for title
+    const float ROW_H = 21.f;
     const float MID_Y = origin.y + H / 2.f;
     const float CENTER_X = origin.x + W / 2.f;
-    const float BAR_MAX_W = 180.f;  // max bar width per side
+    const float BAR_MAX_W = 190.f;  // max bar width per side (fits bid bar + qty label within panel)
 
     // Find max total qty for scaling
     int max_qty = 1;
@@ -228,11 +228,11 @@ void Renderer::drawOrderBook(sf::Vector2f origin, const Simulation& sim) {
         // Price label
         char price_buf[16];
         std::snprintf(price_buf, sizeof(price_buf), "%.2f", centsToDouble(lvl.price));
-        drawText(price_buf, {CENTER_X - 30.f, y + 1.f}, 10,
+        drawText(price_buf, {CENTER_X - 36.f, y + 1.f}, 12,
                  is_bid ? sf::Color(150, 200, 255) : sf::Color(255, 190, 100));
 
         // Draw subdivided bar
-        float x_start = is_bid ? CENTER_X - 35.f - bar_w : CENTER_X + 35.f;
+        float x_start = is_bid ? CENTER_X - 42.f - bar_w : CENTER_X + 42.f;
         float bx = x_start;
         for (auto& [tid, qty] : lvl.orders) {
             float seg_w = (float)qty / max_lvl_qty * BAR_MAX_W;
@@ -248,8 +248,8 @@ void Renderer::drawOrderBook(sf::Vector2f origin, const Simulation& sim) {
 
             drawRect({bx, y}, {seg_w - 1.f, ROW_H - 2.f}, bar_color);
             // Trader ID label inside bar if wide enough
-            if (seg_w > 14.f) {
-                drawText(std::to_string(tid), {bx + 2.f, y + 2.f}, 9, sf::Color::White);
+            if (seg_w > 17.f) {
+                drawText(std::to_string(tid), {bx + 2.f, y + 2.f}, 11, sf::Color::White);
             }
             bx += seg_w;
         }
@@ -257,9 +257,9 @@ void Renderer::drawOrderBook(sf::Vector2f origin, const Simulation& sim) {
         char qty_buf[16];
         std::snprintf(qty_buf, sizeof(qty_buf), "%d", total_qty);
         if (is_bid)
-            drawText(qty_buf, {CENTER_X - 35.f - bar_w - 28.f, y + 1.f}, 10, COL_DIM());
+            drawText(qty_buf, {CENTER_X - 42.f - bar_w - 34.f, y + 1.f}, 12, COL_DIM());
         else
-            drawText(qty_buf, {CENTER_X + 35.f + bar_w + 2.f, y + 1.f}, 10, COL_DIM());
+            drawText(qty_buf, {CENTER_X + 42.f + bar_w + 2.f, y + 1.f}, 12, COL_DIM());
     };
 
     // Draw "SELLS" header above center, "BUYS" below
@@ -287,18 +287,18 @@ void Renderer::drawOrderBook(sf::Vector2f origin, const Simulation& sim) {
 // ── Panel 3: Exchange Message Log ─────────────────────────────────────────────
 
 void Renderer::drawMessageLog(sf::Vector2f origin, const Simulation& sim) {
-    const float W = TOP_W, H = TOP_H;
+    const float W = LOG_W, H = TOP_H;
     drawPanel(origin, {W, H}, "EXCHANGE LOG (last 25)");
 
     const auto& log = sim.getGlobalLog();
-    const float ROW_H = 17.f;
+    const float ROW_H = 22.f;
     const float PAD   = 16.f;
     float y = origin.y + PAD;
 
     for (auto it = log.begin(); it != log.end(); ++it) {
         // Truncate text to fit
         std::string display = it->text;
-        if (display.size() > 48) display = display.substr(0, 47) + "~";
+        if (display.size() > 46) display = display.substr(0, 45) + "~";
 
         sf::Color col = COL_TEXT();
         // Color by message type prefix
@@ -306,7 +306,7 @@ void Renderer::drawMessageLog(sf::Vector2f origin, const Simulation& sim) {
         else if (display.substr(0,6) == "CANCEL") col = COL_YELLOW();
         else if (display.substr(0,3) == "NEW") col = sf::Color(180, 220, 255);
 
-        drawText(display, {origin.x + 4.f, y}, 10, col);
+        drawText(display, {origin.x + 4.f, y}, 12, col);
         y += ROW_H;
         if (y + ROW_H > origin.y + H) break;
     }
@@ -321,24 +321,24 @@ void Renderer::drawHoldingsTable(sf::Vector2f origin, const Simulation& sim) {
     const auto& book = sim.getExchange().getBook();
 
     // Header
-    const float PAD  = 16.f;
-    const float ROW_H = 17.f;
+    const float PAD  = 19.f;
+    const float ROW_H = 21.f;
     float y = origin.y + PAD;
 
-    // Column positions
-    float col_id   = origin.x + 4.f;
-    float col_nlv  = origin.x + 25.f;
-    float col_cash = origin.x + 105.f;
-    float col_sh   = origin.x + 192.f;
-    float col_bq   = origin.x + 258.f;
-    float col_sq   = origin.x + 325.f;
+    // Column positions (scaled for 480px panel width)
+    float col_id   = origin.x + 5.f;
+    float col_nlv  = origin.x + 30.f;
+    float col_cash = origin.x + 126.f;
+    float col_sh   = origin.x + 230.f;
+    float col_bq   = origin.x + 310.f;
+    float col_sq   = origin.x + 390.f;
 
-    drawText("ID",   {col_id,   y}, 10, COL_HEADER());
-    drawText("NLV",  {col_nlv,  y}, 10, COL_HEADER());
-    drawText("Cash", {col_cash, y}, 10, COL_HEADER());
-    drawText("Shrs", {col_sh,   y}, 10, COL_HEADER());
-    drawText("BuyQ", {col_bq,   y}, 10, COL_BUY());
-    drawText("SelQ", {col_sq,   y}, 10, COL_SELL());
+    drawText("ID",   {col_id,   y}, 12, COL_HEADER());
+    drawText("NLV",  {col_nlv,  y}, 12, COL_HEADER());
+    drawText("Cash", {col_cash, y}, 12, COL_HEADER());
+    drawText("Shrs", {col_sh,   y}, 12, COL_HEADER());
+    drawText("BuyQ", {col_bq,   y}, 12, COL_BUY());
+    drawText("SelQ", {col_sq,   y}, 12, COL_SELL());
     y += ROW_H;
 
     // Separator
@@ -381,24 +381,24 @@ void Renderer::drawHoldingsTable(sf::Vector2f origin, const Simulation& sim) {
 
         sf::Color nlv_col = nlv > 0 ? COL_GREEN() : (nlv < 0 ? COL_SELL() : COL_DIM());
 
-        drawText(std::to_string(tr.id()), {col_id,  y}, 10, row_col);
-        drawText(nlv_buf,                 {col_nlv, y}, 10, nlv_col);
-        drawText(cash_buf,                {col_cash, y}, 10, COL_TEXT());
-        drawText(std::to_string(acct.shares), {col_sh, y}, 10,
+        drawText(std::to_string(tr.id()), {col_id,  y}, 12, row_col);
+        drawText(nlv_buf,                 {col_nlv, y}, 12, nlv_col);
+        drawText(cash_buf,                {col_cash, y}, 12, COL_TEXT());
+        drawText(std::to_string(acct.shares), {col_sh, y}, 12,
                  acct.shares > 0 ? COL_BUY() : (acct.shares < 0 ? COL_SELL() : COL_DIM()));
         if (buy_qty > 0)
-            drawText(std::to_string(buy_qty),  {col_bq, y}, 10, COL_BUY());
+            drawText(std::to_string(buy_qty),  {col_bq, y}, 12, COL_BUY());
         if (sell_qty > 0)
-            drawText(std::to_string(sell_qty), {col_sq, y}, 10, COL_SELL());
+            drawText(std::to_string(sell_qty), {col_sq, y}, 12, COL_SELL());
         y += ROW_H;
     }
 
     // Totals row
     drawLine({origin.x + 2.f, y}, {origin.x + W - 2.f, y}, COL_BORDER());
     y += 2.f;
-    drawText("TOT", {col_id, y}, 10, COL_HEADER());
-    drawText(std::to_string(total_buy_qty),  {col_bq, y}, 10, COL_BUY());
-    drawText(std::to_string(total_sell_qty), {col_sq, y}, 10, COL_SELL());
+    drawText("TOT", {col_id, y}, 12, COL_HEADER());
+    drawText(std::to_string(total_buy_qty),  {col_bq, y}, 12, COL_BUY());
+    drawText(std::to_string(total_sell_qty), {col_sq, y}, 12, COL_SELL());
 
     // Best bid/ask display
     y += ROW_H + 4.f;
@@ -409,12 +409,12 @@ void Renderer::drawHoldingsTable(sf::Vector2f origin, const Simulation& sim) {
         std::snprintf(buf, sizeof(buf), "Bid: %.2f   Ask: %.2f   Sprd: %.2f",
             centsToDouble(book.bestBid()), centsToDouble(book.bestAsk()),
             centsToDouble(book.bestAsk() - book.bestBid()));
-        drawText(buf, {origin.x + 4.f, y}, 10, COL_TEXT());
+        drawText(buf, {origin.x + 4.f, y}, 12, COL_TEXT());
     }
 
     // Individual analyst opinions (2 rows of 5)
     y += ROW_H;
-    drawText("Analyst fair values:", {origin.x + 4.f, y}, 10, COL_DIM());
+    drawText("Analyst fair values:", {origin.x + 4.f, y}, 12, COL_DIM());
     y += ROW_H;
     const auto& opinions = sim.getAnalysts().getOpinions();
     for (int row = 0; row < 2; ++row) {
@@ -422,8 +422,8 @@ void Renderer::drawHoldingsTable(sf::Vector2f origin, const Simulation& sim) {
         for (int col = 0; col < 5; ++col) {
             int idx = row * 5 + col;
             std::snprintf(buf, sizeof(buf), "A%d:%.2f", idx + 1, opinions[idx]);
-            drawText(buf, {ax, y}, 10, COL_DIM());
-            ax += 76.f;
+            drawText(buf, {ax, y}, 12, COL_DIM());
+            ax += 91.f;
         }
         y += ROW_H;
     }
@@ -433,7 +433,7 @@ void Renderer::drawHoldingsTable(sf::Vector2f origin, const Simulation& sim) {
     SimTime t = sim.getSimTime();
     int mins = (int)t / 60, secs = (int)t % 60;
     std::snprintf(buf, sizeof(buf), "Sim time: %02d:%02d", mins, secs);
-    drawText(buf, {origin.x + 4.f, y}, 10, COL_DIM());
+    drawText(buf, {origin.x + 4.f, y}, 12, COL_DIM());
 }
 
 // ── Trader panel (bottom grid) ────────────────────────────────────────────────
@@ -444,8 +444,8 @@ void Renderer::drawTraderPanel(sf::Vector2f origin, sf::Vector2f sz,
     std::string title = (is_mm ? "MM" : "INV") + std::to_string(trader.id());
     drawPanel(origin, sz, title);
 
-    const float PAD   = 14.f;
-    const float ROW_H = 16.f;
+    const float PAD   = 17.f;
+    const float ROW_H = 21.f;
     float y = origin.y + PAD;
 
     // Cash + shares header
@@ -472,14 +472,14 @@ void Renderer::drawTraderPanel(sf::Vector2f origin, sf::Vector2f sz,
 
     std::snprintf(header, sizeof(header), "$%s  Pos:%+d  FV:$%.2f%s",
                   cash_buf, acct.shares, fv, intention.c_str());
-    drawText(header, {origin.x + 55.f, origin.y + 2.f}, 10,
+    drawText(header, {origin.x + 66.f, origin.y + 2.f}, 12,
              is_mm ? COL_GREEN() : COL_YELLOW());
 
     // Log entries
     const auto& log = trader.getLog();
     for (auto it = log.begin(); it != log.end(); ++it) {
         std::string display = it->text;
-        if (display.size() > 40) display = display.substr(0, 39) + "~";
+        if (display.size() > 46) display = display.substr(0, 45) + "~";
 
         sf::Color col = COL_TEXT();
         if (display.find("FILL") != std::string::npos)        col = COL_GREEN();
@@ -487,7 +487,7 @@ void Renderer::drawTraderPanel(sf::Vector2f origin, sf::Vector2f sz,
         else if (display.find("SELL")   != std::string::npos) col = COL_SELL();
         else if (display.find("CANCEL") != std::string::npos) col = COL_YELLOW();
 
-        drawText(display, {origin.x + 3.f, y}, 10, col);
+        drawText(display, {origin.x + 3.f, y}, 12, col);
         y += ROW_H;
         if (y + ROW_H > origin.y + sz.y) break;
     }

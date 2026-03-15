@@ -16,6 +16,9 @@ private:
     std::array<double, NUM_ANALYSTS> opinions_;
     SimTime next_update_ = 5.0;   // first update at t=5s
 
+    int last_news_direction_   = 0; // +1, -1, or 0 (no event yet)
+    int consecutive_news_count_ = 0; // consecutive events in current direction
+
     void applyRandomUpdate(double midquote, bool has_midquote);
     void applyNewsEvent();
 };
