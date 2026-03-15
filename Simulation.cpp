@@ -4,10 +4,13 @@
 Simulation::Simulation() : rng_(std::random_device{}()) {
     sim_start_wall_ = std::chrono::steady_clock::now();
 
-    // Randomize per-trader latency 1000–3000 ms
-    std::uniform_real_distribution<double> lat_dist(1000.0, 3000.0);
-    for (int i = 0; i < NUM_TRADERS; ++i)
-        trader_avg_latency_[i] = lat_dist(rng_);
+    // Randomize per-trader latency: MMs 300–500 ms, Investors 1000–1500 ms
+    std::uniform_real_distribution<double> mm_lat_dist(300.0, 500.0);
+    std::uniform_real_distribution<double> inv_lat_dist(1000.0, 1500.0);
+    for (int i = 0; i < NUM_MARKET_MAKERS; ++i)
+        trader_avg_latency_[i] = mm_lat_dist(rng_);
+    for (int i = NUM_MARKET_MAKERS; i < NUM_TRADERS; ++i)
+        trader_avg_latency_[i] = inv_lat_dist(rng_);
 
     // ── Create Market Makers (IDs 1-5) ────────────────────────────────────────
     // ID, latency, accum_thresh, part_thresh, init_bid, init_ask (in cents)
@@ -133,7 +136,7 @@ void Simulation::tick() {
     auto new_logs = exchange_.drainGlobalLog();
     for (auto& entry : new_logs) {
         global_log_.push_back(entry);
-        while ((int)global_log_.size() > 20)
+        while ((int)global_log_.size() > 25)
             global_log_.pop_front();
     }
 }

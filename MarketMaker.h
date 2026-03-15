@@ -1,6 +1,8 @@
 #pragma once
 #include "Trader.h"
 #include <unordered_set>
+#include <deque>
+#include <optional>
 
 class MarketMaker : public Trader {
 public:
@@ -23,6 +25,7 @@ private:
     // Track which of our live order IDs are on each side
     std::unordered_set<OrderID> buy_order_ids_;
     std::unordered_set<OrderID> sell_order_ids_;
+    std::unordered_set<OrderID> pending_cancel_ids_;  // cancel sent, not yet confirmed
 
     // Track qty per order (needed for participation threshold logic)
     std::unordered_map<OrderID, Qty> order_qtys_;
@@ -40,6 +43,21 @@ private:
     SimTime last_aggressive_buy_  = -999.0;
     SimTime last_aggressive_sell_ = -999.0;
     static constexpr SimTime AGGRESSIVE_COOLDOWN = 2.0;
+
+    // Midquote history for trend-aware re-quoting
+    struct MidquoteSample { SimTime time; double midquote_cents; };
+    std::deque<MidquoteSample> mq_history_;
+    SimTime last_mq_sample_time_ = -999.0;
+    static constexpr SimTime MQ_SAMPLE_INTERVAL = 0.5;   // sample every 0.5s
+    static constexpr SimTime MQ_HISTORY_WINDOW  = 10.0;  // keep last 10s
+
+    // Last known best prices — used as fallback when one side of book is empty
+    Price last_best_bid_ = 0;
+    Price last_best_ask_ = 0;
+
+    // Returns midquote in cents for the sample closest to target_time,
+    // or empty if no sample is within 2 seconds of that time.
+    std::optional<double> getMidquoteAt(SimTime target_time) const;
 
     void handleAck      (const NewAckMsg&    msg, SimTime now);
     void handleFill     (const FillMsg&      msg, SimTime now);

@@ -26,11 +26,15 @@ private:
     Qty      active_qty_   = 0;
     SimTime  order_sent_time_ = -1.0;
     bool     waiting_for_ack_ = false;
+    bool     cancelling_      = false;  // cancel sent, awaiting CancelledMsg or CancelRejectMsg
 
     static constexpr SimTime MODIFY_TIMEOUT = 5.0;  // seconds before trying to modify
-    static constexpr Qty     ORDER_QTY      = 50;   // size per order
 
     double computeFairValue(const std::array<double, NUM_ANALYSTS>& opinions) const;
+
+    // Base size = min(0.5*max_position, 100); doubles for every 3 dollars of mispricing.
+    // Capped so the position limit is not breached.
+    Qty computeOrderQty(double mispricing_dollars, Qty capacity) const;
 
     void handleAck      (const NewAckMsg&    msg, SimTime now);
     void handleFill     (const FillMsg&      msg, SimTime now);

@@ -1,6 +1,7 @@
 #include "Investor.h"
 #include <numeric>
 #include <sstream>
+#include <cmath>
 
 Investor::Investor(TraderID id, double avg_latency_ms,
                    int max_position,
@@ -9,6 +10,13 @@ Investor::Investor(TraderID id, double avg_latency_ms,
     , max_position_(max_position)
     , weights_(analyst_weights)
 {}
+
+Qty Investor::computeOrderQty(double mispricing_dollars, Qty capacity) const {
+    Qty base = std::min((int)(0.5 * max_position_), 100);
+    int doublings = (int)(mispricing_dollars / 3.0);   // floor
+    Qty qty = base * (1 << doublings);                 // base × 2^doublings
+    return std::min(qty, capacity);
+}
 
 double Investor::computeFairValue(const std::array<double, NUM_ANALYSTS>& opinions) const {
     double fv = 0.0;
@@ -44,6 +52,7 @@ void Investor::handleFill(const FillMsg& msg, SimTime now) {
         if (active_qty_ <= 0) {
             active_order_id_.reset();
             live_orders_.erase(msg.order_id);
+            cancelling_ = false;  // order is gone; no cancel confirmation will arrive
         }
     }
     addLog(now, "FILL " + filledStr(msg.side) + " qty=" + std::to_string(msg.qty) +
@@ -55,6 +64,7 @@ void Investor::handleCancelled(const CancelledMsg& msg, SimTime now) {
     if (active_order_id_.has_value() && active_order_id_.value() == msg.order_id) {
         active_order_id_.reset();
         live_orders_.erase(msg.order_id);
+        cancelling_ = false;
     }
     addLog(now, "CANCELLED id=" + std::to_string(msg.order_id));
 }
@@ -69,6 +79,7 @@ void Investor::onMessage(const ExchToTraderMsg& msg, SimTime now) {
             if (active_order_id_.has_value() && active_order_id_.value() == m.order_id) {
                 active_order_id_.reset();
                 waiting_for_ack_ = false;
+                cancelling_ = false;
             }
             addLog(now, "CANCELREJECT id=" + std::to_string(m.order_id));
         }
@@ -76,6 +87,7 @@ void Investor::onMessage(const ExchToTraderMsg& msg, SimTime now) {
             if (active_order_id_.has_value() && active_order_id_.value() == m.order_id) {
                 active_order_id_.reset();
                 waiting_for_ack_ = false;
+                cancelling_ = false;
             }
             addLog(now, "MODIFYREJECT id=" + std::to_string(m.order_id));
         }
@@ -94,13 +106,15 @@ std::vector<TraderToExchMsg> Investor::onTick(SimTime now, const ExchangeView& v
 
     // ── If we have an active order, manage it ───────────────────────────────
     if (active_order_id_.has_value() && !waiting_for_ack_) {
+        // Cancel in flight — wait for CancelledMsg or CancelRejectMsg before acting
+        if (cancelling_) return out;
+
         bool still_favorable = (active_side_ == Side::BUY && want_buy) ||
                                (active_side_ == Side::SELL && want_sell);
 
         if (!still_favorable) {
-            // Cancel the order
             out.push_back(makeCancel(active_order_id_.value(), now));
-            active_order_id_.reset();
+            cancelling_ = true;   // keep active_order_id_ set until exchange confirms
             addLog(now, "CANCEL (no longer favorable)");
             return out;
         }
@@ -132,7 +146,8 @@ std::vector<TraderToExchMsg> Investor::onTick(SimTime now, const ExchangeView& v
 
     if (want_buy) {
         Price p = view.best_ask;
-        Qty   q = std::min(ORDER_QTY, max_position_ - shares_);
+        double mispricing = fv - centsToDouble(p);
+        Qty   q = computeOrderQty(mispricing, max_position_ - shares_);
         if (q > 0) {
             out.push_back(makeNewOrder(Side::BUY, q, p, now));
             order_sent_time_ = now;
@@ -143,7 +158,8 @@ std::vector<TraderToExchMsg> Investor::onTick(SimTime now, const ExchangeView& v
         }
     } else if (want_sell) {
         Price p = view.best_bid;
-        Qty   q = std::min(ORDER_QTY, max_position_ + shares_);
+        double mispricing = centsToDouble(p) - fv;
+        Qty   q = computeOrderQty(mispricing, max_position_ + shares_);
         if (q > 0) {
             out.push_back(makeNewOrder(Side::SELL, q, p, now));
             order_sent_time_ = now;

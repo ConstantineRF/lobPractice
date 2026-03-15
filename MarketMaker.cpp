@@ -1,6 +1,7 @@
 #include "MarketMaker.h"
 #include <sstream>
 #include <algorithm>
+#include <cmath>
 
 MarketMaker::MarketMaker(TraderID id, double avg_latency_ms,
                          int accumulation_threshold,
@@ -19,14 +20,14 @@ MarketMaker::MarketMaker(TraderID id, double avg_latency_ms,
 int MarketMaker::totalBuyQty() const {
     int total = 0;
     for (auto& [oid, qty] : order_qtys_)
-        if (buy_order_ids_.count(oid)) total += qty;
+        if (buy_order_ids_.count(oid) && !pending_cancel_ids_.count(oid)) total += qty;
     return total;
 }
 
 int MarketMaker::totalSellQty() const {
     int total = 0;
     for (auto& [oid, qty] : order_qtys_)
-        if (sell_order_ids_.count(oid)) total += qty;
+        if (sell_order_ids_.count(oid) && !pending_cancel_ids_.count(oid)) total += qty;
     return total;
 }
 
@@ -69,6 +70,7 @@ void MarketMaker::handleFill(const FillMsg& msg, SimTime now) {
             buy_order_ids_.erase(msg.order_id);
             sell_order_ids_.erase(msg.order_id);
             live_orders_.erase(msg.order_id);
+            pending_cancel_ids_.erase(msg.order_id);
         }
     }
 
@@ -84,6 +86,7 @@ void MarketMaker::handleCancelled(const CancelledMsg& msg, SimTime now) {
     sell_order_ids_.erase(msg.order_id);
     order_qtys_.erase(msg.order_id);
     live_orders_.erase(msg.order_id);
+    pending_cancel_ids_.erase(msg.order_id);
     addLog(now, "CANCELLED id=" + std::to_string(msg.order_id));
 }
 
@@ -102,9 +105,35 @@ std::vector<TraderToExchMsg> MarketMaker::onTick(SimTime now, const ExchangeView
     return generateOrders(now, view);
 }
 
+std::optional<double> MarketMaker::getMidquoteAt(SimTime target_time) const {
+    if (mq_history_.empty()) return std::nullopt;
+    const MidquoteSample* best = nullptr;
+    double best_diff = 1e18;
+    for (const auto& s : mq_history_) {
+        double diff = std::abs(s.time - target_time);
+        if (diff < best_diff) { best_diff = diff; best = &s; }
+    }
+    return (best && best_diff <= 2.0) ? std::optional<double>(best->midquote_cents) : std::nullopt;
+}
+
 std::vector<TraderToExchMsg> MarketMaker::generateOrders(SimTime now, const ExchangeView& view) {
     std::vector<TraderToExchMsg> out;
     int abs_pos = std::abs(shares_);
+
+    // ── Update fallback prices and midquote history ───────────────────────────
+    if (view.has_bid) last_best_bid_ = view.best_bid;
+    if (view.has_ask) last_best_ask_ = view.best_ask;
+    Price eff_bid = view.has_bid ? view.best_bid : last_best_bid_;
+    Price eff_ask = view.has_ask ? view.best_ask : last_best_ask_;
+    // Clamp fallback prices so they stay sensibly inside the spread
+    if (!view.has_bid && eff_ask != 0) eff_bid = std::min(eff_bid, eff_ask - 2 * TICK);
+    if (!view.has_ask && eff_bid != 0) eff_ask = std::max(eff_ask, eff_bid + 2 * TICK);
+    if (eff_bid != 0 && eff_ask != 0 && now - last_mq_sample_time_ >= MQ_SAMPLE_INTERVAL) {
+        mq_history_.push_back({now, (eff_bid + eff_ask) / 2.0});
+        last_mq_sample_time_ = now;
+        while (!mq_history_.empty() && mq_history_.front().time < now - MQ_HISTORY_WINDOW)
+            mq_history_.pop_front();
+    }
 
     // ── 1. Place initial orders (within first 2 seconds) ─────────────────────
     if (!placed_initial_buy_ && !waiting_ack_buy_) {
@@ -120,20 +149,51 @@ std::vector<TraderToExchMsg> MarketMaker::generateOrders(SimTime now, const Exch
         addLog(now, "NEW SELL 100 @$" + std::to_string(centsToDouble(init_ask_)).substr(0,6));
     }
 
-    // ── 2. Re-quote if a side is empty (must always keep ≥1 bid and ≥1 ask) ──
-    if (!hasBuyOrder() && !waiting_ack_buy_ && view.has_bid) {
-        Price bid_price = view.best_bid - TICK;  // just below best bid
-        if (!view.has_bid) bid_price = view.best_ask - 10 * TICK;
+    // ── 2. Re-quote if a side is empty ────────────────────────────────────────
+    // Default depth is 1 tick. If trend and position align, compute deeper placement:
+    //   N = 1 + 2 * |10s midquote change in cents| * |position| / accum_thresh
+    // BUY side: place deeper when both 5s windows trending DOWN and position is LONG.
+    // SELL side: place deeper when both 5s windows trending UP and position is SHORT.
+    // Falls back to last known price (clamped) if the live book side is empty.
+    if (!hasBuyOrder() && !waiting_ack_buy_ && eff_bid != 0) {
+        int depth = 1;
+        if (shares_ > 0 && eff_ask != 0) {
+            double mq_now = (eff_bid + eff_ask) / 2.0;
+            auto   mq_5s  = getMidquoteAt(now - 5.0);
+            auto   mq_10s = getMidquoteAt(now - 10.0);
+            if (mq_5s && mq_10s) {
+                bool both_down = (mq_now < *mq_5s) && (*mq_5s < *mq_10s);
+                if (both_down) {
+                    double change = std::abs(mq_now - *mq_10s);
+                    depth = (int)(1.0 + 2.0 * change * std::abs(shares_) / accum_thresh_);
+                }
+            }
+        }
+        Price bid_price = eff_bid - depth * TICK;
         out.push_back(makeNewOrder(Side::BUY, 100, bid_price, now));
         waiting_ack_buy_ = true;
-        addLog(now, "REQUOTE BUY 100 @$" + std::to_string(centsToDouble(bid_price)).substr(0,6));
+        addLog(now, "REQUOTE BUY 100 @$" + std::to_string(centsToDouble(bid_price)).substr(0,6)
+            + " (depth=" + std::to_string(depth) + ")");
     }
-    if (!hasSellOrder() && !waiting_ack_sell_ && view.has_ask) {
-        Price ask_price = view.best_ask + TICK;
-        if (!view.has_ask) ask_price = view.best_bid + 10 * TICK;
+    if (!hasSellOrder() && !waiting_ack_sell_ && eff_ask != 0) {
+        int depth = 1;
+        if (shares_ < 0 && eff_bid != 0) {
+            double mq_now = (eff_bid + eff_ask) / 2.0;
+            auto   mq_5s  = getMidquoteAt(now - 5.0);
+            auto   mq_10s = getMidquoteAt(now - 10.0);
+            if (mq_5s && mq_10s) {
+                bool both_up = (mq_now > *mq_5s) && (*mq_5s > *mq_10s);
+                if (both_up) {
+                    double change = std::abs(mq_now - *mq_10s);
+                    depth = (int)(1.0 + 2.0 * change * std::abs(shares_) / accum_thresh_);
+                }
+            }
+        }
+        Price ask_price = eff_ask + depth * TICK;
         out.push_back(makeNewOrder(Side::SELL, 100, ask_price, now));
         waiting_ack_sell_ = true;
-        addLog(now, "REQUOTE SELL 100 @$" + std::to_string(centsToDouble(ask_price)).substr(0,6));
+        addLog(now, "REQUOTE SELL 100 @$" + std::to_string(centsToDouble(ask_price)).substr(0,6)
+            + " (depth=" + std::to_string(depth) + ")");
     }
 
     // ── 3. Accumulation threshold logic ───────────────────────────────────────
@@ -195,11 +255,9 @@ std::vector<TraderToExchMsg> MarketMaker::generateOrders(SimTime now, const Exch
         std::sort(buys.begin(), buys.end());  // ascending = least aggressive first
         for (auto& [price, oid] : buys) {
             if (totalBuyQty() <= part_thresh_) break;
+            if (pending_cancel_ids_.count(oid)) continue;  // cancel already in flight
             out.push_back(makeCancel(oid, now));
-            // Optimistically remove from tracking (will be confirmed by CancelledMsg)
-            buy_order_ids_.erase(oid);
-            order_qtys_.erase(oid);
-            live_orders_.erase(oid);
+            pending_cancel_ids_.insert(oid);  // track until CancelledMsg confirms
             addLog(now, "CANCEL BUY id=" + std::to_string(oid) + " (part thresh)");
         }
     }
@@ -214,10 +272,9 @@ std::vector<TraderToExchMsg> MarketMaker::generateOrders(SimTime now, const Exch
         std::sort(sells.rbegin(), sells.rend());  // descending = least aggressive first
         for (auto& [price, oid] : sells) {
             if (totalSellQty() <= part_thresh_) break;
+            if (pending_cancel_ids_.count(oid)) continue;  // cancel already in flight
             out.push_back(makeCancel(oid, now));
-            sell_order_ids_.erase(oid);
-            order_qtys_.erase(oid);
-            live_orders_.erase(oid);
+            pending_cancel_ids_.insert(oid);  // track until CancelledMsg confirms
             addLog(now, "CANCEL SELL id=" + std::to_string(oid) + " (part thresh)");
         }
     }
