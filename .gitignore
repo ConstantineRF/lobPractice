@@ -1,0 +1,6 @@
+# Compiled binaries
+*.exe
+*.o
+
+# SFML DLLs (local dependency, not part of source)
+*.dll

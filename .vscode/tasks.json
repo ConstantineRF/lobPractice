@@ -1,0 +1,37 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "type": "cppbuild",
+            "label": "C/C++: g++.exe build lobPractice",
+            "command": "C:\\msys64\\ucrt64\\bin\\g++.exe",
+            "args": [
+                "-fdiagnostics-color=always",
+                "-g",
+                "-std=c++17",
+                "-fuse-ld=lld",
+                "*.cpp",
+                "-I\"C:/Kostya/CODING/SFML-3.0.0-cpp/include\"",
+                "-o",
+                "${workspaceFolder}\\lobPractice.exe",
+                "-L\"C:/Kostya/CODING/SFML-3.0.0-cpp/lib\"",
+                "-lsfml-graphics",
+                "-lsfml-window",
+                "-lsfml-system",
+                "-lsfml-audio",
+                "-lsfml-network"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "problemMatcher": [
+                "$gcc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "detail": "Build lobPractice with SFML 3.0.0"
+        }
+    ]
+}
