@@ -29,10 +29,9 @@ void Exchange::processNewOrder(const NewOrderMsg& msg, SimTime now) {
     NewAckMsg ack{msg.trader_id, msg.side, msg.qty, msg.price, oid, now};
     outbound_trader_.push_back({msg.trader_id, ack});
 
-    std::string log_text = "NEWACK " + sideStr(msg.side) + " " +
-        std::to_string(msg.trader_id) + " " + std::to_string(msg.qty) + " " +
-        std::to_string(centsToDouble(msg.price)).substr(0,6) + " " +
-        std::to_string(oid) + " " + formatTime(now);
+    std::string log_text = formatTime(now) + " NEWACK " + sideStr(msg.side) +
+        " acct=" + std::to_string(msg.trader_id) + " " + std::to_string(msg.qty) + " @" +
+        std::to_string(centsToDouble(msg.price)).substr(0,6) + " id=" + std::to_string(oid);
     addGlobalLog(now, msg.trader_id, log_text);
 
     // Build and attempt to match the order
@@ -63,9 +62,8 @@ void Exchange::processCancel(const CancelMsg& msg, SimTime now) {
         // Order doesn't exist or wrong owner
         CancelRejectMsg rej{msg.trader_id, msg.order_id, now};
         outbound_trader_.push_back({msg.trader_id, rej});
-        addGlobalLog(now, msg.trader_id, "CANCELREJECT " +
-            std::to_string(msg.trader_id) + " " + std::to_string(msg.order_id) +
-            " " + formatTime(now));
+        addGlobalLog(now, msg.trader_id, formatTime(now) + " CANCELREJECT acct=" +
+            std::to_string(msg.trader_id) + " id=" + std::to_string(msg.order_id));
         return;
     }
 
@@ -75,15 +73,13 @@ void Exchange::processCancel(const CancelMsg& msg, SimTime now) {
         order_info_.erase(msg.order_id);
         CancelledMsg cm{msg.trader_id, msg.order_id, now};
         outbound_trader_.push_back({msg.trader_id, cm});
-        addGlobalLog(now, msg.trader_id, "CANCELLED " +
-            std::to_string(msg.trader_id) + " " + std::to_string(msg.order_id) +
-            " " + formatTime(now));
+        addGlobalLog(now, msg.trader_id, formatTime(now) + " CANCELLED acct=" +
+            std::to_string(msg.trader_id) + " id=" + std::to_string(msg.order_id));
     } else {
         CancelRejectMsg rej{msg.trader_id, msg.order_id, now};
         outbound_trader_.push_back({msg.trader_id, rej});
-        addGlobalLog(now, msg.trader_id, "CANCELREJECT " +
-            std::to_string(msg.trader_id) + " " + std::to_string(msg.order_id) +
-            " " + formatTime(now));
+        addGlobalLog(now, msg.trader_id, formatTime(now) + " CANCELREJECT acct=" +
+            std::to_string(msg.trader_id) + " id=" + std::to_string(msg.order_id));
     }
     broadcastLobChanges(now);
 }
@@ -94,9 +90,8 @@ void Exchange::processModify(const ModifyMsg& msg, SimTime now) {
         // Order gone — send modify reject
         ModifyRejectMsg rej{msg.trader_id, msg.order_id, now};
         outbound_trader_.push_back({msg.trader_id, rej});
-        addGlobalLog(now, msg.trader_id, "MODIFYREJECT " +
-            std::to_string(msg.trader_id) + " " + std::to_string(msg.order_id) +
-            " " + formatTime(now));
+        addGlobalLog(now, msg.trader_id, formatTime(now) + " MODIFYREJECT acct=" +
+            std::to_string(msg.trader_id) + " id=" + std::to_string(msg.order_id));
         return;
     }
 
@@ -121,10 +116,9 @@ void Exchange::processModify(const ModifyMsg& msg, SimTime now) {
     // NEWACK with same order_id
     NewAckMsg ack{msg.trader_id, msg.side, msg.new_qty, msg.new_price, msg.order_id, now};
     outbound_trader_.push_back({msg.trader_id, ack});
-    addGlobalLog(now, msg.trader_id, "NEWACK(MOD) " + sideStr(msg.side) + " " +
-        std::to_string(msg.trader_id) + " " + std::to_string(msg.new_qty) + " " +
-        std::to_string(centsToDouble(msg.new_price)).substr(0,6) + " " +
-        std::to_string(msg.order_id) + " " + formatTime(now));
+    addGlobalLog(now, msg.trader_id, formatTime(now) + " MODIFYACK " + sideStr(msg.side) +
+        " acct=" + std::to_string(msg.trader_id) + " " + std::to_string(msg.new_qty) + " @" +
+        std::to_string(centsToDouble(msg.new_price)).substr(0,6) + " id=" + std::to_string(msg.order_id));
 
     if (result.remainder.has_value()) {
         order_owners_[msg.order_id] = msg.trader_id;
@@ -166,14 +160,14 @@ void Exchange::applyFills(const OrderBook::MatchResult& result, TraderID aggress
             outbound_trader_.push_back({aggressor_id, fm_aggressor});
 
             std::string ts = formatTime(now);
-            addGlobalLog(now, passive_id,   "FILL BOUGHT " + std::to_string(passive_id) +
-                " " + std::to_string(fill_qty) + " " +
-                std::to_string(centsToDouble(fill_price)).substr(0,6) + " " +
-                std::to_string(passive.id) + " " + ts);
-            addGlobalLog(now, aggressor_id, "FILL SOLD " + std::to_string(aggressor_id) +
-                " " + std::to_string(fill_qty) + " " +
-                std::to_string(centsToDouble(fill_price)).substr(0,6) + " " +
-                std::to_string(aggressor.id) + " " + ts);
+            addGlobalLog(now, passive_id,   ts + " FILL BOUGHT acct=" + std::to_string(passive_id) +
+                " " + std::to_string(fill_qty) + " @" +
+                std::to_string(centsToDouble(fill_price)).substr(0,6) + " id=" +
+                std::to_string(passive.id));
+            addGlobalLog(now, aggressor_id, ts + " FILL SOLD acct=" + std::to_string(aggressor_id) +
+                " " + std::to_string(fill_qty) + " @" +
+                std::to_string(centsToDouble(fill_price)).substr(0,6) + " id=" +
+                std::to_string(aggressor.id));
         } else {
             // passive was a seller resting, aggressor was a buyer
             accounts_[aggressor_id].cash   -= dollars;
@@ -187,20 +181,22 @@ void Exchange::applyFills(const OrderBook::MatchResult& result, TraderID aggress
             outbound_trader_.push_back({aggressor_id, fm_aggressor});
 
             std::string ts = formatTime(now);
-            addGlobalLog(now, passive_id,   "FILL SOLD " + std::to_string(passive_id) +
-                " " + std::to_string(fill_qty) + " " +
-                std::to_string(centsToDouble(fill_price)).substr(0,6) + " " +
-                std::to_string(passive.id) + " " + ts);
-            addGlobalLog(now, aggressor_id, "FILL BOUGHT " + std::to_string(aggressor_id) +
-                " " + std::to_string(fill_qty) + " " +
-                std::to_string(centsToDouble(fill_price)).substr(0,6) + " " +
-                std::to_string(aggressor.id) + " " + ts);
+            addGlobalLog(now, passive_id,   ts + " FILL SOLD acct=" + std::to_string(passive_id) +
+                " " + std::to_string(fill_qty) + " @" +
+                std::to_string(centsToDouble(fill_price)).substr(0,6) + " id=" +
+                std::to_string(passive.id));
+            addGlobalLog(now, aggressor_id, ts + " FILL BOUGHT acct=" + std::to_string(aggressor_id) +
+                " " + std::to_string(fill_qty) + " @" +
+                std::to_string(centsToDouble(fill_price)).substr(0,6) + " id=" +
+                std::to_string(aggressor.id));
         }
 
-        // Remove fully-filled passive from ownership tracking
-        // (The order book already removed it from the book)
-        if (passive.qty == fill_qty) {  // fully filled (snapshot qty == original fill qty)
-            // Check if completely gone from book (handled by addOrder already)
+        // Remove fully-filled passive from ownership tracking.
+        // passive.qty was set to fill_qty in the snapshot, so we cannot use
+        // passive.qty == fill_qty as a "fully consumed" test — it is always true.
+        // Instead, ask the book whether the order is still resting (partially filled
+        // orders remain in the book with reduced qty; fully filled orders are gone).
+        if (!book_.isResting(passive.id)) {
             order_owners_.erase(passive.id);
             order_info_.erase(passive.id);
         }

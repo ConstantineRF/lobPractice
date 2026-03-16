@@ -52,6 +52,9 @@ public:
 
     int totalQtyForTrader(TraderID id, Side side) const;
 
+    // True if the order is currently resting in the book (not fully filled/cancelled)
+    bool isResting(OrderID id) const;
+
 private:
     // BUY: highest price first (best bid at top)
     std::map<Price, std::deque<Order>, std::greater<Price>> bids_;

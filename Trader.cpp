@@ -14,7 +14,9 @@ void Trader::addLog(SimTime now, const std::string& text) {
 SimTime Trader::sampleDelivery(SimTime now) const {
     std::uniform_real_distribution<double> dist(0.8, 1.2);
     double latency_s = avg_latency_ms_ * dist(rng_) / 1000.0;
-    return now + latency_s;
+    SimTime delivery = std::max(now + latency_s, last_outbound_delivery_);
+    last_outbound_delivery_ = delivery;
+    return delivery;
 }
 
 NewOrderMsg Trader::makeNewOrder(Side side, Qty qty, Price price, SimTime now) const {
@@ -46,7 +48,7 @@ ModifyMsg Trader::makeModify(OrderID order_id, Side side, Qty qty, Price price, 
     msg.new_price    = price;
     msg.sent_time    = now;
     msg.delivery_time = sampleDelivery(now);
-    addLog(now, "MODIFY " + sideStr(side) + " @$" +
+    addLog(now, "-> MODIFY " + sideStr(side) + " @$" +
         std::to_string(centsToDouble(price)).substr(0, 6) +
         " id=" + std::to_string(order_id));
     return msg;

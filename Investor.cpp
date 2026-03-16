@@ -26,13 +26,24 @@ double Investor::computeFairValue(const std::array<double, NUM_ANALYSTS>& opinio
 }
 
 void Investor::handleAck(const NewAckMsg& msg, SimTime now) {
+    // Guard against stale modify-acks: a successful modify sends a NewAckMsg with the
+    // same order_id. If the order was fully filled before the modify arrived, active_order_id_
+    // is already nullopt and waiting_for_ack_ is false — ignore the stale ack.
+    bool is_new_order_ack = waiting_for_ack_;
+    bool is_modify_ack    = !waiting_for_ack_ &&
+                            active_order_id_.has_value() &&
+                            active_order_id_.value() == msg.order_id;
+    if (!is_new_order_ack && !is_modify_ack) {
+        addLog(now, "<- STALE ACK id=" + std::to_string(msg.order_id));
+        return;
+    }
     active_order_id_  = msg.order_id;
     active_side_      = msg.side;
     active_price_     = msg.price;
     active_qty_       = msg.qty;
     waiting_for_ack_  = false;
     live_orders_[msg.order_id] = {msg.order_id, msg.side, msg.qty, msg.price, now};
-    addLog(now, "NEWACK " + sideStr(msg.side) + " qty=" + std::to_string(msg.qty) +
+    addLog(now, "<- NEWACK " + sideStr(msg.side) + " qty=" + std::to_string(msg.qty) +
         " @$" + std::to_string(centsToDouble(msg.price)).substr(0,6) +
         " id=" + std::to_string(msg.order_id));
 }
@@ -55,7 +66,7 @@ void Investor::handleFill(const FillMsg& msg, SimTime now) {
             cancelling_ = false;  // order is gone; no cancel confirmation will arrive
         }
     }
-    addLog(now, "FILL " + filledStr(msg.side) + " qty=" + std::to_string(msg.qty) +
+    addLog(now, "<- FILL " + filledStr(msg.side) + " qty=" + std::to_string(msg.qty) +
         " @$" + std::to_string(centsToDouble(msg.price)).substr(0,6) +
         " id=" + std::to_string(msg.order_id));
 }
@@ -66,7 +77,7 @@ void Investor::handleCancelled(const CancelledMsg& msg, SimTime now) {
         live_orders_.erase(msg.order_id);
         cancelling_ = false;
     }
-    addLog(now, "CANCELLED id=" + std::to_string(msg.order_id));
+    addLog(now, "<- CANCELLED id=" + std::to_string(msg.order_id));
 }
 
 void Investor::onMessage(const ExchToTraderMsg& msg, SimTime now) {
@@ -76,22 +87,25 @@ void Investor::onMessage(const ExchToTraderMsg& msg, SimTime now) {
         else if constexpr (std::is_same_v<T, FillMsg>)        handleFill(m, now);
         else if constexpr (std::is_same_v<T, CancelledMsg>)   handleCancelled(m, now);
         else if constexpr (std::is_same_v<T, CancelRejectMsg>) {
-            // Always clear flags — active_order_id_ may already be nullopt if a full fill
-            // arrived before this reject, so don't gate the cleanup on the id check.
-            waiting_for_ack_ = false;
+            // Cancel rejected — order is definitively gone (filled before cancel arrived).
+            // Clear cancelling_ unconditionally. Do NOT touch waiting_for_ack_: a new
+            // order may already be in flight — clearing it would allow a duplicate send,
+            // orphaning the first order once both acks arrive.
             cancelling_ = false;
             if (active_order_id_.has_value() && active_order_id_.value() == m.order_id)
                 active_order_id_.reset();
-            addLog(now, "CANCELREJECT id=" + std::to_string(m.order_id));
+            addLog(now, "<- CANCELREJECT id=" + std::to_string(m.order_id));
         }
         else if constexpr (std::is_same_v<T, ModifyRejectMsg>) {
-            // Same: full fill may have already cleared active_order_id_ while the modify
-            // was in flight, leaving waiting_for_ack_ stuck true if we guard on the id.
-            waiting_for_ack_ = false;
-            cancelling_ = false;
-            if (active_order_id_.has_value() && active_order_id_.value() == m.order_id)
+            // Modify rejected — order is gone. Clear order tracking if id matches.
+            // Also clear cancelling_: any in-flight cancel for this dead order will
+            // itself be rejected, so there is nothing left to wait for.
+            // Do NOT touch waiting_for_ack_ — same reasoning as CancelRejectMsg.
+            if (active_order_id_.has_value() && active_order_id_.value() == m.order_id) {
                 active_order_id_.reset();
-            addLog(now, "MODIFYREJECT id=" + std::to_string(m.order_id));
+                cancelling_ = false;
+            }
+            addLog(now, "<- MODIFYREJECT id=" + std::to_string(m.order_id));
         }
     }, msg);
 }
@@ -117,7 +131,7 @@ std::vector<TraderToExchMsg> Investor::onTick(SimTime now, const ExchangeView& v
         if (!still_favorable) {
             out.push_back(makeCancel(active_order_id_.value(), now));
             cancelling_ = true;   // keep active_order_id_ set until exchange confirms
-            addLog(now, "CANCEL (no longer favorable)");
+            addLog(now, "-> CANCEL id=" + std::to_string(active_order_id_.value()) + " (no longer favorable)");
             return out;
         }
 
@@ -155,7 +169,7 @@ std::vector<TraderToExchMsg> Investor::onTick(SimTime now, const ExchangeView& v
             out.push_back(makeNewOrder(Side::BUY, q, p, now));
             order_sent_time_ = now;
             waiting_for_ack_ = true;
-            addLog(now, "NEW BUY " + std::to_string(q) + " @$" +
+            addLog(now, "-> NEW BUY " + std::to_string(q) + " @$" +
                 std::to_string(centsToDouble(p)).substr(0,6) +
                 " (fv=$" + std::to_string(fv).substr(0,6) + ")");
         }
@@ -167,7 +181,7 @@ std::vector<TraderToExchMsg> Investor::onTick(SimTime now, const ExchangeView& v
             out.push_back(makeNewOrder(Side::SELL, q, p, now));
             order_sent_time_ = now;
             waiting_for_ack_ = true;
-            addLog(now, "NEW SELL " + std::to_string(q) + " @$" +
+            addLog(now, "-> NEW SELL " + std::to_string(q) + " @$" +
                 std::to_string(centsToDouble(p)).substr(0,6) +
                 " (fv=$" + std::to_string(fv).substr(0,6) + ")");
         }

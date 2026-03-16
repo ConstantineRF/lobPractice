@@ -149,6 +149,10 @@ bool OrderBook::modifyOrder(OrderID id, Side side, Qty new_qty, Price new_price,
     return true;
 }
 
+bool OrderBook::isResting(OrderID id) const {
+    return side_idx_.find(id) != side_idx_.end();
+}
+
 bool OrderBook::hasBid() const { return !bids_.empty(); }
 bool OrderBook::hasAsk() const { return !asks_.empty(); }
 

@@ -66,4 +66,7 @@ protected:
 
     // RNG (shared per-trader instance)
     mutable std::mt19937 rng_;
+
+    // Ensures outbound messages arrive at the exchange in send order
+    mutable SimTime last_outbound_delivery_ = 0.0;
 };

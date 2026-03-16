@@ -177,7 +177,7 @@ void Renderer::drawPriceChart(sf::Vector2f origin, const Simulation& sim) {
 
 void Renderer::drawOrderBook(sf::Vector2f origin, const Simulation& sim) {
     const float W = OB_W, H = TOP_H;
-    drawPanel(origin, {W, H}, "ORDER BOOK — KostyaEx: XYZ");
+    drawPanel(origin, {W, H}, "ORDER BOOK - KostyaEx: XYZ");
 
     const auto& book = sim.getExchange().getBook();
     auto bid_levels = book.getBidLevels(12);
@@ -298,13 +298,18 @@ void Renderer::drawMessageLog(sf::Vector2f origin, const Simulation& sim) {
     for (auto it = log.begin(); it != log.end(); ++it) {
         // Truncate text to fit
         std::string display = it->text;
-        if (display.size() > 46) display = display.substr(0, 45) + "~";
+        if (display.size() > 56) display = display.substr(0, 55) + "~";
 
         sf::Color col = COL_TEXT();
-        // Color by message type prefix
-        if (display.substr(0,4) == "FILL") col = COL_GREEN();
-        else if (display.substr(0,6) == "CANCEL") col = COL_YELLOW();
-        else if (display.substr(0,3) == "NEW") col = sf::Color(180, 220, 255);
+        // Color by keyword (timestamp is now a prefix, so search by content)
+        if (display.find("FILL") != std::string::npos)
+            col = COL_GREEN();
+        else if (display.find("CANCEL") != std::string::npos || display.find("REJECT") != std::string::npos)
+            col = COL_YELLOW();
+        else if (display.find("NEWACK") != std::string::npos || display.find("MODIFYACK") != std::string::npos) {
+            if      (display.find("BUY")  != std::string::npos) col = COL_BUY();
+            else if (display.find("SELL") != std::string::npos) col = COL_SELL();
+        }
 
         drawText(display, {origin.x + 4.f, y}, 12, col);
         y += ROW_H;
@@ -316,7 +321,7 @@ void Renderer::drawMessageLog(sf::Vector2f origin, const Simulation& sim) {
 
 void Renderer::drawHoldingsTable(sf::Vector2f origin, const Simulation& sim) {
     const float W = TOP_W, H = TOP_H;
-    drawPanel(origin, {W, H}, "HOLDINGS — KostyaEx: XYZ");
+    drawPanel(origin, {W, H}, "HOLDINGS - KostyaEx: XYZ");
 
     const auto& book = sim.getExchange().getBook();
 
@@ -482,10 +487,11 @@ void Renderer::drawTraderPanel(sf::Vector2f origin, sf::Vector2f sz,
         if (display.size() > 46) display = display.substr(0, 45) + "~";
 
         sf::Color col = COL_TEXT();
-        if (display.find("FILL") != std::string::npos)        col = COL_GREEN();
-        else if (display.find("BUY")    != std::string::npos) col = COL_BUY();
-        else if (display.find("SELL")   != std::string::npos) col = COL_SELL();
-        else if (display.find("CANCEL") != std::string::npos) col = COL_YELLOW();
+        if (display.find("FILL") != std::string::npos)              col = COL_GREEN();
+        else if (display.find("MODIFYREJECT") != std::string::npos) col = sf::Color(255, 160, 180);
+        else if (display.find("BUY")    != std::string::npos)       col = COL_BUY();
+        else if (display.find("SELL")   != std::string::npos)       col = COL_SELL();
+        else if (display.find("CANCEL") != std::string::npos)       col = COL_YELLOW();
 
         drawText(display, {origin.x + 3.f, y}, 12, col);
         y += ROW_H;

@@ -43,7 +43,7 @@ void MarketMaker::handleAck(const NewAckMsg& msg, SimTime now) {
     order_qtys_[oid] = msg.qty;
     live_orders_[oid] = {oid, msg.side, msg.qty, msg.price, now};
 
-    std::string s = "NEWACK " + sideStr(msg.side) + " qty=" +
+    std::string s = "<- NEWACK " + sideStr(msg.side) + " qty=" +
         std::to_string(msg.qty) + " @$" +
         std::to_string(centsToDouble(msg.price)).substr(0,6) +
         " id=" + std::to_string(oid);
@@ -74,7 +74,7 @@ void MarketMaker::handleFill(const FillMsg& msg, SimTime now) {
         }
     }
 
-    std::string s = "FILL " + filledStr(msg.side) + " qty=" +
+    std::string s = "<- FILL " + filledStr(msg.side) + " qty=" +
         std::to_string(msg.qty) + " @$" +
         std::to_string(centsToDouble(msg.price)).substr(0,6) +
         " id=" + std::to_string(msg.order_id);
@@ -87,7 +87,7 @@ void MarketMaker::handleCancelled(const CancelledMsg& msg, SimTime now) {
     order_qtys_.erase(msg.order_id);
     live_orders_.erase(msg.order_id);
     pending_cancel_ids_.erase(msg.order_id);
-    addLog(now, "CANCELLED id=" + std::to_string(msg.order_id));
+    addLog(now, "<- CANCELLED id=" + std::to_string(msg.order_id));
 }
 
 void MarketMaker::onMessage(const ExchToTraderMsg& msg, SimTime now) {
@@ -96,8 +96,8 @@ void MarketMaker::onMessage(const ExchToTraderMsg& msg, SimTime now) {
         if constexpr (std::is_same_v<T, NewAckMsg>)            handleAck(m, now);
         else if constexpr (std::is_same_v<T, FillMsg>)         handleFill(m, now);
         else if constexpr (std::is_same_v<T, CancelledMsg>)    handleCancelled(m, now);
-        else if constexpr (std::is_same_v<T, CancelRejectMsg>) addLog(now, "CANCELREJECT id=" + std::to_string(m.order_id));
-        else if constexpr (std::is_same_v<T, ModifyRejectMsg>) addLog(now, "MODIFYREJECT id=" + std::to_string(m.order_id));
+        else if constexpr (std::is_same_v<T, CancelRejectMsg>) addLog(now, "<- CANCELREJECT id=" + std::to_string(m.order_id));
+        else if constexpr (std::is_same_v<T, ModifyRejectMsg>) addLog(now, "<- MODIFYREJECT id=" + std::to_string(m.order_id));
     }, msg);
 }
 
@@ -140,13 +140,13 @@ std::vector<TraderToExchMsg> MarketMaker::generateOrders(SimTime now, const Exch
         out.push_back(makeNewOrder(Side::BUY, 100, init_bid_, now));
         placed_initial_buy_ = true;
         waiting_ack_buy_    = true;
-        addLog(now, "NEW BUY 100 @$" + std::to_string(centsToDouble(init_bid_)).substr(0,6));
+        addLog(now, "-> NEW BUY 100 @$" + std::to_string(centsToDouble(init_bid_)).substr(0,6));
     }
     if (!placed_initial_sell_ && !waiting_ack_sell_) {
         out.push_back(makeNewOrder(Side::SELL, 100, init_ask_, now));
         placed_initial_sell_ = true;
         waiting_ack_sell_    = true;
-        addLog(now, "NEW SELL 100 @$" + std::to_string(centsToDouble(init_ask_)).substr(0,6));
+        addLog(now, "-> NEW SELL 100 @$" + std::to_string(centsToDouble(init_ask_)).substr(0,6));
     }
 
     // ── 2. Re-quote if a side is empty ────────────────────────────────────────
@@ -172,8 +172,8 @@ std::vector<TraderToExchMsg> MarketMaker::generateOrders(SimTime now, const Exch
         Price bid_price = eff_bid - depth * TICK;
         out.push_back(makeNewOrder(Side::BUY, 100, bid_price, now));
         waiting_ack_buy_ = true;
-        addLog(now, "REQUOTE BUY 100 @$" + std::to_string(centsToDouble(bid_price)).substr(0,6)
-            + " (depth=" + std::to_string(depth) + ")");
+        addLog(now, "-> NEW BUY 100 @$" + std::to_string(centsToDouble(bid_price)).substr(0,6)
+            + " (requote depth=" + std::to_string(depth) + ")");
     }
     if (!hasSellOrder() && !waiting_ack_sell_ && eff_ask != 0) {
         int depth = 1;
@@ -192,8 +192,8 @@ std::vector<TraderToExchMsg> MarketMaker::generateOrders(SimTime now, const Exch
         Price ask_price = eff_ask + depth * TICK;
         out.push_back(makeNewOrder(Side::SELL, 100, ask_price, now));
         waiting_ack_sell_ = true;
-        addLog(now, "REQUOTE SELL 100 @$" + std::to_string(centsToDouble(ask_price)).substr(0,6)
-            + " (depth=" + std::to_string(depth) + ")");
+        addLog(now, "-> NEW SELL 100 @$" + std::to_string(centsToDouble(ask_price)).substr(0,6)
+            + " (requote depth=" + std::to_string(depth) + ")");
     }
 
     // ── 3. Accumulation threshold logic ───────────────────────────────────────
@@ -209,7 +209,7 @@ std::vector<TraderToExchMsg> MarketMaker::generateOrders(SimTime now, const Exch
                 out.push_back(makeNewOrder(Side::SELL, 100, p, now));
                 last_aggressive_sell_ = now;
                 waiting_ack_sell_ = true;
-                addLog(now, "AGGR SELL 100 @$" + std::to_string(centsToDouble(p)).substr(0,6));
+                addLog(now, "-> NEW SELL 100 @$" + std::to_string(centsToDouble(p)).substr(0,6) + " (aggressive)");
             }
         }
         if (shares_ < 0 && !waiting_ack_buy_ &&
@@ -219,7 +219,7 @@ std::vector<TraderToExchMsg> MarketMaker::generateOrders(SimTime now, const Exch
                 out.push_back(makeNewOrder(Side::BUY, 100, p, now));
                 last_aggressive_buy_ = now;
                 waiting_ack_buy_ = true;
-                addLog(now, "AGGR BUY 100 @$" + std::to_string(centsToDouble(p)).substr(0,6));
+                addLog(now, "-> NEW BUY 100 @$" + std::to_string(centsToDouble(p)).substr(0,6) + " (aggressive)");
             }
         }
     } else if (abs_pos >= 2 * accum_thresh_) {
@@ -230,7 +230,7 @@ std::vector<TraderToExchMsg> MarketMaker::generateOrders(SimTime now, const Exch
             out.push_back(makeNewOrder(Side::SELL, 100, p, now));
             last_aggressive_sell_ = now;
             waiting_ack_sell_ = true;
-            addLog(now, "MKT SELL 100 @$" + std::to_string(centsToDouble(p)).substr(0,6));
+            addLog(now, "-> NEW SELL 100 @$" + std::to_string(centsToDouble(p)).substr(0,6) + " (making)");
         }
         if (shares_ < 0 && !waiting_ack_buy_ &&
             now - last_aggressive_buy_ > AGGRESSIVE_COOLDOWN && view.has_ask) {
@@ -238,7 +238,7 @@ std::vector<TraderToExchMsg> MarketMaker::generateOrders(SimTime now, const Exch
             out.push_back(makeNewOrder(Side::BUY, 100, p, now));
             last_aggressive_buy_ = now;
             waiting_ack_buy_ = true;
-            addLog(now, "MKT BUY 100 @$" + std::to_string(centsToDouble(p)).substr(0,6));
+            addLog(now, "-> NEW BUY 100 @$" + std::to_string(centsToDouble(p)).substr(0,6) + " (making)");
         }
     }
 
@@ -258,7 +258,7 @@ std::vector<TraderToExchMsg> MarketMaker::generateOrders(SimTime now, const Exch
             if (pending_cancel_ids_.count(oid)) continue;  // cancel already in flight
             out.push_back(makeCancel(oid, now));
             pending_cancel_ids_.insert(oid);  // track until CancelledMsg confirms
-            addLog(now, "CANCEL BUY id=" + std::to_string(oid) + " (part thresh)");
+            addLog(now, "-> CANCEL BUY id=" + std::to_string(oid) + " (part thresh)");
         }
     }
     // SELL side
@@ -275,7 +275,7 @@ std::vector<TraderToExchMsg> MarketMaker::generateOrders(SimTime now, const Exch
             if (pending_cancel_ids_.count(oid)) continue;  // cancel already in flight
             out.push_back(makeCancel(oid, now));
             pending_cancel_ids_.insert(oid);  // track until CancelledMsg confirms
-            addLog(now, "CANCEL SELL id=" + std::to_string(oid) + " (part thresh)");
+            addLog(now, "-> CANCEL SELL id=" + std::to_string(oid) + " (part thresh)");
         }
     }
 
@@ -289,8 +289,8 @@ std::vector<TraderToExchMsg> MarketMaker::generateOrders(SimTime now, const Exch
                 Qty q = std::min(100, shares_);
                 out.push_back(makeNewOrder(Side::SELL, q, p, now));
                 waiting_ack_sell_ = true;
-                addLog(now, "PATIENCE SELL " + std::to_string(q) + " @$" +
-                    std::to_string(centsToDouble(p)).substr(0,6));
+                addLog(now, "-> NEW SELL " + std::to_string(q) + " @$" +
+                    std::to_string(centsToDouble(p)).substr(0,6) + " (patience)");
             }
         } else if (shares_ < 0 && spread > TICK && !waiting_ack_buy_) {
             Price p = view.best_bid + TICK;
@@ -298,8 +298,8 @@ std::vector<TraderToExchMsg> MarketMaker::generateOrders(SimTime now, const Exch
                 Qty q = std::min(100, -shares_);
                 out.push_back(makeNewOrder(Side::BUY, q, p, now));
                 waiting_ack_buy_ = true;
-                addLog(now, "PATIENCE BUY " + std::to_string(q) + " @$" +
-                    std::to_string(centsToDouble(p)).substr(0,6));
+                addLog(now, "-> NEW BUY " + std::to_string(q) + " @$" +
+                    std::to_string(centsToDouble(p)).substr(0,6) + " (patience)");
             }
         } else if (shares_ == 0 && spread >= 3 * TICK) {
             Price bid_p = view.best_bid + TICK;
@@ -308,14 +308,14 @@ std::vector<TraderToExchMsg> MarketMaker::generateOrders(SimTime now, const Exch
                 if (!waiting_ack_buy_) {
                     out.push_back(makeNewOrder(Side::BUY, 100, bid_p, now));
                     waiting_ack_buy_ = true;
-                    addLog(now, "PATIENCE BUY 100 @$" +
-                        std::to_string(centsToDouble(bid_p)).substr(0,6));
+                    addLog(now, "-> NEW BUY 100 @$" +
+                        std::to_string(centsToDouble(bid_p)).substr(0,6) + " (patience)");
                 }
                 if (!waiting_ack_sell_) {
                     out.push_back(makeNewOrder(Side::SELL, 100, ask_p, now));
                     waiting_ack_sell_ = true;
-                    addLog(now, "PATIENCE SELL 100 @$" +
-                        std::to_string(centsToDouble(ask_p)).substr(0,6));
+                    addLog(now, "-> NEW SELL 100 @$" +
+                        std::to_string(centsToDouble(ask_p)).substr(0,6) + " (patience)");
                 }
             }
         }
